@@ -1,11 +1,22 @@
 -- set up variables
-local textFont = love.graphics.newFont(16)
+local textFont = love.graphics.newFont(24)
 local glyphFont = nil
 
 local textColors = {}
 
-textColors.default = {0.08, 0.08, 0.08}
-textColors.pressed = {1.00, 1.00, 1.00}
+textColors.buttons = {}
+
+textColors.buttons.light = { 0.16, 0.28, 0.80 }
+textColors.buttons.dark  = {}
+
+textColors.buttons.default = textColors.buttons.light
+
+textColors.body = {}
+
+textColors.body.light = { 0.00, 0.00, 0.00 }
+textColors.body.dark  = { 1.00, 1.00, 1.00 }
+
+textColors.body.default = textColors.body.light
 
 g_windowShown = false
 
@@ -29,32 +40,19 @@ local function newButton(id, t, x, width)
     button.width = width
 
     button.x = x
-    button.y = boxPosition.y + (boxSize.h - 40)
+    button.y = boxPosition.y + (boxSize.h - 70)
 
     button.width = width
-    button.height = 40
+    button.height = 70
 
     button.id = id or 1
 
-    button.textColor = textColors.default
-
-    function button:drawShadowText(x, y)
-        love.graphics.setColor(textColors.default)
-        love.graphics.print(self.text, textFont, x, y)
-    end
+    button.textColor = textColors.buttons.default
 
     function button:draw()
         local x, y = self.x + (self.width - textFont:getWidth(self.text)) / 2, self.y + (self.height - textFont:getHeight()) / 2
 
-        if self.textColor == textColors.pressed then
-            self:drawShadowText(x, y + 1)
-        end
-
         love.graphics.setColor(self.textColor)
-
-        if self.shortcut then
-            love.graphics.print(utf8.char("0xE000"), glyphFont, x - 32, y)
-        end
         love.graphics.print(self.text, textFont, x, y)
     end
 
@@ -70,13 +68,13 @@ local function newButton(id, t, x, width)
 
     function button:touchpressed(_, x, y)
         if (x > self.x and x + 1 < self.x + self.width and y > self.y and y + 1 < self.y + self.height) then
-            self.textColor = textColors.pressed
+            -- self.textColor = textColors.pressed
             return true
         end
     end
 
     function button:touchreleased()
-        self.textColor = textColors.default
+        -- self.textColor = textColors.default
     end
 
     function button:mousepressed(x, y)
@@ -90,7 +88,6 @@ local function newMessageBox(text, buttons)
     local messagebox = {}
 
     local currentFont = love.graphics.getFont()
-    textFont:setLineHeight(1.25)
 
     messagebox.buttons = {}
 
@@ -98,29 +95,9 @@ local function newMessageBox(text, buttons)
         assert(#buttons < 3, "cannot have more than two buttons")
     end
 
-    -- textures
-    local textures = {}
-
-    textures.single = {}
-
-    textures.single[0] = love.graphics.newImage("romfs/prompt_single_up.png")
-    textures.single[1] = love.graphics.newImage("romfs/prompt_single_down.png")
-
-    textures.double = {}
-
-    textures.double[0] = love.graphics.newImage("romfs/prompt_double_up.png")
-    textures.double[1] = love.graphics.newImage("romfs/prompt_double_left.png")
-    textures.double[2] = love.graphics.newImage("romfs/prompt_double_right.png")
-
-    messagebox.texture = textures.single[0]
-
     if not buttons or #buttons == 0 then
         table.insert(messagebox.buttons, newButton(1, "OK", boxPosition.x, boxSize.w))
     else
-        if #buttons == 2 then
-            messagebox.texture = textures.double[0]
-        end
-
         local width = (boxSize.w / #buttons)
         for i = 1, #buttons do
             table.insert(messagebox.buttons, newButton(i, buttons[i], boxPosition.x + (i - 1) * width, width))
@@ -145,6 +122,8 @@ local function newMessageBox(text, buttons)
     releasedEvents.touchreleased = true
     releasedEvents.mousereleased = true
 
+    messagebox.selection = 1
+
     function messagebox:poll(event, ...)
         local args = {...}
 
@@ -167,15 +146,22 @@ local function newMessageBox(text, buttons)
                         buttonID = button:getID()
                     end
                 end
+                table.remove(args, 1)
+
+                if args[1] == "dpright" then
+                    self.selection = math.min(self.selection + 1, #self.buttons)
+                elseif args[1] == "dpleft" then
+                    self.selection = math.max(1, self.selection - 1)
+                end
             end
 
             if not buttonID then
                 return
             end
 
-            self.texture = textures[self.mode][buttonID]
+            -- self.texture = textures[self.mode][buttonID]
         elseif releasedEvents[event] then
-            self.texture = self.baseTexture
+            -- self.texture = self.baseTexture
 
             if buttonID then
                 self.buttons[buttonID]:touchreleased()
@@ -193,10 +179,10 @@ local function newMessageBox(text, buttons)
         love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth("bottom"), love.graphics.getHeight())
 
         love.graphics.setColor(1, 1, 1, self.opacity)
-        love.graphics.draw(self.texture, boxPosition.x, boxPosition.y)
+        love.graphics.rectangle("fill", boxPosition.x, boxPosition.y, boxSize.w, boxSize.h, 4, 4)
 
-        love.graphics.setColor(textColors.default)
-        love.graphics.printf(text, textFont, 24, ((boxPosition.y + boxSize.h) - 40) / 3, boxSize.w - 24, "center")
+        love.graphics.setColor(textColors.body.default)
+        love.graphics.printf(text, textFont, boxPosition.x + 72, ((boxPosition.y + boxSize.h) - 70) / 2, boxSize.w - 144, "left")
 
         for _, value in ipairs(self.buttons) do
             value:draw()
@@ -255,8 +241,8 @@ end
 function love.window.showMessageBox(_, text, buttons)
     g_windowShown = true
 
-    boxPosition = { x = 10, y = 12}
-    boxSize = { w = (love.graphics.getWidth("bottom") or 320) - (boxPosition.x * 2), h = love.graphics.getHeight() - (boxPosition.y * 2)}
+    boxSize = { w = 770, h = 352}
+    boxPosition = { x = (love.graphics.getWidth() - boxSize.w) / 2, y = (love.graphics.getHeight() - boxSize.h) / 2}
 
     box = newMessageBox(text, buttons)
 
