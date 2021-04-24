@@ -1,5 +1,7 @@
 -- set up variables
 local textFont = love.graphics.newFont(16)
+local glyphFont = nil
+
 local textColors = {}
 
 textColors.default = {0.08, 0.08, 0.08}
@@ -10,10 +12,20 @@ g_windowShown = false
 local boxPosition = {}
 local boxSize = {}
 
-local function newButton(id, text, x, width)
+local utf8 = require("utf8")
+
+local function newButton(id, t, x, width)
     local button = {}
 
-    button.text = text
+    assert(type(t) == "table" or type(tostring(t)) == "string")
+
+    if type(t) == "table" then
+        button.text = t[1] or t.text
+        button.shortcut = t[2] or t.button
+    else
+        button.text = t
+    end
+
     button.width = width
 
     button.x = x
@@ -39,13 +51,27 @@ local function newButton(id, text, x, width)
         end
 
         love.graphics.setColor(self.textColor)
+
+        if self.shortcut then
+            love.graphics.print(utf8.char("0xE000"), glyphFont, x - 32, y)
+        end
         love.graphics.print(self.text, textFont, x, y)
+    end
+
+    function button:getID()
+        return self.id
+    end
+
+    function button:gamepadpressed(_, button)
+        if button == self.shortcut then
+            return true
+        end
     end
 
     function button:touchpressed(_, x, y)
         if (x > self.x and x + 1 < self.x + self.width and y > self.y and y + 1 < self.y + self.height) then
             self.textColor = textColors.pressed
-            return self.id
+            return true
         end
     end
 
@@ -67,7 +93,10 @@ local function newMessageBox(text, buttons)
     textFont:setLineHeight(1.25)
 
     messagebox.buttons = {}
-    assert(#buttons < 3, "cannot have more than two buttons")
+
+    if buttons then
+        assert(#buttons < 3, "cannot have more than two buttons")
+    end
 
     -- textures
     local textures = {}
@@ -85,8 +114,8 @@ local function newMessageBox(text, buttons)
 
     messagebox.texture = textures.single[0]
 
-    if #buttons == 0 then
-        table.insert(messagebox.buttons, newButton("OK", boxPosition.x, boxSize.w))
+    if not buttons or #buttons == 0 then
+        table.insert(messagebox.buttons, newButton(1, "OK", boxPosition.x, boxSize.w))
     else
         if #buttons == 2 then
             messagebox.texture = textures.double[0]
@@ -100,19 +129,43 @@ local function newMessageBox(text, buttons)
 
     messagebox.baseTexture = messagebox.texture
     messagebox.mode = #messagebox.buttons == 1 and "single" or "double"
+    messagebox.opacity = 0
 
     local buttonID = nil
+
+    local pressedEvents = {}
+
+    pressedEvents.gamepadpressed = true
+    pressedEvents.mousepressed = true
+    pressedEvents.touchpressed = true
+
+    local releasedEvents = {}
+
+    releasedEvents.gamepadreleased = true
+    releasedEvents.touchreleased = true
+    releasedEvents.mousereleased = true
+
     function messagebox:poll(event, ...)
         local args = {...}
 
-        if event == "touchpressed" or event == "mousepressed" then
+        if pressedEvents[event] then
             if event == "touchpressed" then
                 for _, button in ipairs(self.buttons) do
-                    buttonID = button:touchpressed(unpack(args))
+                    if button:touchpressed(unpack(args)) then
+                        buttonID = button:getID()
+                    end
                 end
             elseif event == "mousepressed" then
                 for _, button in ipairs(self.buttons) do
-                    buttonID = button:mousepressed(unpack(args))
+                    if button:mousepressed(unpack(args)) then
+                        buttonID = button:getID()
+                    end
+                end
+            elseif event == "gamepadpressed" then
+                for _, button in ipairs(self.buttons) do
+                    if button:gamepadpressed(unpack(args)) then
+                        buttonID = button:getID()
+                    end
                 end
             end
 
@@ -121,19 +174,25 @@ local function newMessageBox(text, buttons)
             end
 
             self.texture = textures[self.mode][buttonID]
-        elseif event == "touchreleased" or event == "mousereleased" then
+        elseif releasedEvents[event] then
             self.texture = self.baseTexture
+
             if buttonID then
                 self.buttons[buttonID]:touchreleased()
             end
-            return buttonID
+            return self.mode == "double" and buttonID or buttonID and true
         end
     end
 
-    function messagebox:draw()
-        love.graphics.setColor(1, 1, 1)
-        love.graphics.print(love.timer.getFPS())
+    function messagebox:update(dt)
+        self.opacity = math.min(self.opacity + dt / 0.1, 1)
+    end
 
+    function messagebox:draw()
+        love.graphics.setColor(0, 0, 0, 0.5)
+        love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth("bottom"), love.graphics.getHeight())
+
+        love.graphics.setColor(1, 1, 1, self.opacity)
         love.graphics.draw(self.texture, boxPosition.x, boxPosition.y)
 
         love.graphics.setColor(textColors.default)
@@ -144,6 +203,7 @@ local function newMessageBox(text, buttons)
         end
 
         love.graphics.setFont(currentFont)
+        love.graphics.setColor(1, 1, 1, 1)
     end
 
     return messagebox
@@ -171,9 +231,7 @@ local function main()
         end
 
         -- Call update
-        if love.update then
-            love.update(dt)
-        end
+        box:update(dt)
 
         if love.graphics and love.graphics.isActive() then
             love.graphics.origin()
@@ -194,7 +252,7 @@ local function main()
     end
 end
 
-function love.window.showMessageBox(text, buttons)
+function love.window.showMessageBox(_, text, buttons)
     g_windowShown = true
 
     boxPosition = { x = 10, y = 12}
