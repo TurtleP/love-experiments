@@ -1,2 +1,3 @@
 ## LÖVE Experiments
-This repository will house some experiments I do in the LÖVE framework. There will be three folders: CTR (3DS), HAC (Switch), and PC. 3DS and Switch will have their own resolutions and require the nëst library to function. Furthemore, (some of) the console examples will need to be ran on the device hardware, depending on what it is.
+
+This repository will house some experiments I do in the LÖVE framework. Each one is housed inside its respective module folder. The folders labeled `_ctr` and `_hac` within a module represent testing specific for Nintendo 3DS and Nintendo Switch. This may require use of the physical hardware, depending on the example. Otherwise, you can use the nëst library.
